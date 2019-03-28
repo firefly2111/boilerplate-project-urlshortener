@@ -6,7 +6,7 @@ var mongoose = require('mongoose');
 var bodyParser = require("body-parser");
 
 var cors = require('cors');
-
+var dns = require("dns");
 var app = express();
 
 // Basic Configuration 
@@ -39,19 +39,54 @@ app.get('/', function(req, res){
 
 // your first API endpoint... 
 app.post("/api/shorturl/new", function (req, res) {
-  var shortUrlNumber  = Math.floor(Math.random() * 1000);
+  var regex = /https:\/\/www.|http:\/\/www./g;
+dns.lookup(req.body.url.replace(regex, ""), (err, adress, family) => {
+  if(err){
+    res.json({err: err});
+  }else{
+    urlDatabase.find().then(data => {
+      var databaseData = new urlDatabase({url: req.body.url, shortUrl: data.length});
+      data = data.filter((i) => i["url"] === req.body.url);
+      if(data.length === 0){
+        databaseData.save().then(result => {
+          res.json({"originalURL":result.url, "shortURL": result.shortUrl});
+        }).catch(err => {
+          res.json({error: err});
+        });
+      }else{
+        var search = req.body.url;
+        urlDatabase.find({url: search}).then(result => {
+          res.json({url: result[0].url, shortUrl: result[0].shortUrl});
+        }).catch(err => {
+          res.json({error: err});
+        });
+      }
+    }).catch(err => {
+      res.json({error: err});
+    });
+  }
+});
   
-  var myURL = new urlDatabase(req.body, shortUrlNumber);
-  
-  
-  myURL.save().then((data) => {
-    res.json({url: myURL, shortURL: shortUrlNumber});
-  }).catch((err) => {
-    res.status(400).json({message: "Cant write data"});
+});
+
+app.get("/api/shorturl", function(req, res){
+  urlDatabase.find().then(result => {
+    res.json(result);
+  }).catch(err => {
+    res.json({error: err});
   });
 });
 
 
+app.get("/api/shorturl/:shortUrl", function(req, res){
+  var shortUrl = req.params.shortUrl;
+  urlDatabase.find({shortUrl: shortUrl}).then(result => {
+    res.redirect(result[0]["url"]);
+  }).catch(err => {
+    res.json({error: err});
+  });
+});
+
 app.listen(port, function () {
   console.log('Node.js listening ...');
-});
+})
